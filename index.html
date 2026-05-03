@@ -1,0 +1,1149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>THE GLOBAL CHAOS BUTTON</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:ital,wght@0,400;0,700;1,400&family=Bebas+Neue&family=VT323&display=swap" rel="stylesheet">
+<script src="/socket.io/socket.io.js"></script>
+
+<style>
+/* ── CSS Variables ────────────────────────────────────────────────────────── */
+:root {
+  --bg: #080808;
+  --surface: #111111;
+  --border: #222;
+  --btn-color: #ff2020;
+  --btn-glow: #ff2020;
+  --btn-shadow: rgba(255,32,32,0.6);
+  --text: #e8e8e8;
+  --muted: #555;
+  --accent: #ff2020;
+  --gold: #ffd700;
+  --chaos: #9f00ff;
+  --font-display: 'Bebas Neue', sans-serif;
+  --font-mono: 'Space Mono', monospace;
+  --font-glitch: 'VT323', monospace;
+  --btn-size: 160px;
+  --shake-x: 0px;
+  --shake-y: 0px;
+}
+
+.theme-void {
+  --btn-color: #6600ff;
+  --btn-glow: #9f00ff;
+  --btn-shadow: rgba(159,0,255,0.6);
+  --accent: #9f00ff;
+}
+.theme-gold {
+  --btn-color: #cc9900;
+  --btn-glow: #ffd700;
+  --btn-shadow: rgba(255,215,0,0.6);
+  --accent: #ffd700;
+}
+.theme-ice {
+  --btn-color: #0088cc;
+  --btn-glow: #00ccff;
+  --btn-shadow: rgba(0,204,255,0.6);
+  --accent: #00ccff;
+}
+
+/* ── Reset & Base ─────────────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  width: 100%; height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-mono);
+  overflow: hidden;
+  cursor: crosshair;
+}
+
+/* ── Noise overlay ───────────────────────────────────────────────────────── */
+body::before {
+  content: '';
+  position: fixed; inset: 0;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
+  opacity: 0.03;
+  pointer-events: none;
+  z-index: 9999;
+  animation: noiseShift 0.15s steps(1) infinite;
+}
+
+@keyframes noiseShift {
+  0%   { transform: translate(0,0); }
+  25%  { transform: translate(-2px,1px); }
+  50%  { transform: translate(1px,-2px); }
+  75%  { transform: translate(2px,1px); }
+  100% { transform: translate(-1px,2px); }
+}
+
+/* ── Scanlines ────────────────────────────────────────────────────────────── */
+body::after {
+  content: '';
+  position: fixed; inset: 0;
+  background: repeating-linear-gradient(
+    to bottom,
+    transparent 0px,
+    transparent 2px,
+    rgba(0,0,0,0.08) 2px,
+    rgba(0,0,0,0.08) 4px
+  );
+  pointer-events: none;
+  z-index: 9998;
+}
+
+/* ── Layout ───────────────────────────────────────────────────────────────── */
+#app {
+  width: 100vw; height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  transform: translate(var(--shake-x), var(--shake-y));
+  transition: transform 0.05s;
+}
+
+/* ── Header ───────────────────────────────────────────────────────────────── */
+#header {
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  padding: 16px 24px;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  z-index: 100;
+  border-bottom: 1px solid var(--border);
+  background: rgba(8,8,8,0.85);
+  backdrop-filter: blur(8px);
+}
+
+#title-block h1 {
+  font-family: var(--font-display);
+  font-size: clamp(20px, 4vw, 36px);
+  letter-spacing: 3px;
+  color: var(--accent);
+  text-shadow: 0 0 20px var(--btn-shadow);
+  line-height: 1;
+}
+
+#title-block .subtitle {
+  font-size: 10px;
+  color: var(--muted);
+  letter-spacing: 4px;
+  text-transform: uppercase;
+  margin-top: 3px;
+}
+
+#stats-bar {
+  text-align: right;
+  font-size: 11px;
+  color: var(--muted);
+  line-height: 1.8;
+}
+
+#stats-bar .stat-val {
+  color: var(--text);
+  font-weight: 700;
+}
+
+/* ── Identity Panel ───────────────────────────────────────────────────────── */
+#identity-panel {
+  position: fixed;
+  bottom: 0; left: 0; right: 0;
+  padding: 12px 24px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-top: 1px solid var(--border);
+  background: rgba(8,8,8,0.85);
+  backdrop-filter: blur(8px);
+  z-index: 100;
+  font-size: 11px;
+}
+
+#identity-panel .id-block { line-height: 1.7; }
+#identity-panel .title-badge {
+  font-family: var(--font-glitch);
+  font-size: 18px;
+  color: var(--accent);
+  text-shadow: 0 0 10px var(--btn-shadow);
+}
+
+#personal-clicks {
+  text-align: right;
+  line-height: 1.7;
+}
+
+/* ── Main counter ─────────────────────────────────────────────────────────── */
+#counter-display {
+  text-align: center;
+  margin-bottom: 20px;
+  position: relative;
+  z-index: 10;
+}
+
+#global-count {
+  font-family: var(--font-display);
+  font-size: clamp(60px, 12vw, 120px);
+  color: var(--accent);
+  letter-spacing: 6px;
+  line-height: 1;
+  text-shadow:
+    0 0 40px var(--btn-shadow),
+    0 0 80px var(--btn-shadow);
+  transition: color 0.2s;
+}
+
+#count-label {
+  font-size: 11px;
+  letter-spacing: 6px;
+  color: var(--muted);
+  text-transform: uppercase;
+  margin-top: 4px;
+}
+
+/* ── Button Arena ─────────────────────────────────────────────────────────── */
+#button-arena {
+  position: relative;
+  width: 400px;
+  height: 400px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ── The Button ───────────────────────────────────────────────────────────── */
+.chaos-btn {
+  position: absolute;
+  width: var(--btn-size);
+  height: var(--btn-size);
+  border-radius: 50%;
+  border: 3px solid var(--btn-color);
+  background: radial-gradient(circle at 35% 35%, #2a0a0a, #1a0000 60%, #000);
+  color: var(--btn-color);
+  font-family: var(--font-display);
+  font-size: 26px;
+  letter-spacing: 3px;
+  cursor: pointer;
+  transition: transform 0.1s, box-shadow 0.1s;
+  box-shadow:
+    0 0 30px var(--btn-shadow),
+    0 0 80px rgba(255,32,32,0.2),
+    inset 0 0 30px rgba(255,32,32,0.1);
+  user-select: none;
+  -webkit-user-select: none;
+  z-index: 50;
+}
+
+.chaos-btn:hover {
+  transform: scale(1.06);
+  box-shadow:
+    0 0 50px var(--btn-shadow),
+    0 0 120px rgba(255,32,32,0.4),
+    inset 0 0 40px rgba(255,32,32,0.2);
+}
+
+.chaos-btn:active {
+  transform: scale(0.94);
+}
+
+.chaos-btn.fake-btn {
+  opacity: 0.6;
+  filter: blur(0.5px);
+}
+
+.chaos-btn.fake-btn:hover {
+  transform: scale(1.02);
+}
+
+/* Hold button variant */
+.chaos-btn.hold-mode {
+  border-style: dashed;
+  font-size: 14px;
+  letter-spacing: 1px;
+}
+
+.hold-progress {
+  position: absolute;
+  bottom: -20px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 120px;
+  height: 4px;
+  background: var(--border);
+  border-radius: 2px;
+  overflow: hidden;
+  display: none;
+}
+
+.hold-progress-bar {
+  height: 100%;
+  background: var(--accent);
+  width: 0%;
+  transition: width 0.05s linear;
+}
+
+/* ── Chaos Mode Banner ────────────────────────────────────────────────────── */
+#chaos-banner {
+  position: fixed;
+  top: 80px; left: 0; right: 0;
+  text-align: center;
+  padding: 10px;
+  background: linear-gradient(90deg, transparent, rgba(159,0,255,0.3), transparent);
+  font-family: var(--font-display);
+  font-size: clamp(20px, 5vw, 42px);
+  letter-spacing: 8px;
+  color: var(--chaos);
+  text-shadow: 0 0 30px var(--chaos), 0 0 60px var(--chaos);
+  z-index: 200;
+  display: none;
+  animation: chaosFlicker 0.5s steps(1) infinite;
+}
+
+@keyframes chaosFlicker {
+  0%  { opacity: 1; }
+  45% { opacity: 1; }
+  50% { opacity: 0.4; }
+  55% { opacity: 1; }
+  90% { opacity: 1; }
+  95% { opacity: 0.6; }
+}
+
+#chaos-timer {
+  font-family: var(--font-mono);
+  font-size: 14px;
+  letter-spacing: 3px;
+  color: var(--chaos);
+  opacity: 0.8;
+}
+
+/* ── Floating click indicators ────────────────────────────────────────────── */
+.float-indicator {
+  position: fixed;
+  font-family: var(--font-display);
+  font-size: 28px;
+  pointer-events: none;
+  z-index: 300;
+  animation: floatUp 1.2s ease-out forwards;
+}
+
+@keyframes floatUp {
+  0%   { opacity: 1; transform: translateY(0) scale(1); }
+  100% { opacity: 0; transform: translateY(-80px) scale(1.4); }
+}
+
+/* ── Notification toast ───────────────────────────────────────────────────── */
+#toast-container {
+  position: fixed;
+  top: 90px; right: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  z-index: 400;
+  max-width: 300px;
+}
+
+.toast {
+  padding: 12px 16px;
+  background: var(--surface);
+  border: 1px solid var(--accent);
+  border-left: 4px solid var(--accent);
+  font-size: 12px;
+  line-height: 1.5;
+  box-shadow: 0 0 20px var(--btn-shadow);
+  animation: toastIn 0.3s ease, toastOut 0.3s ease 3.7s forwards;
+}
+
+.toast .toast-title {
+  font-family: var(--font-display);
+  font-size: 18px;
+  color: var(--accent);
+  letter-spacing: 2px;
+}
+
+.toast.gold-toast { border-color: var(--gold); box-shadow: 0 0 20px rgba(255,215,0,0.4); }
+.toast.gold-toast .toast-title { color: var(--gold); }
+.toast.chaos-toast { border-color: var(--chaos); box-shadow: 0 0 20px rgba(159,0,255,0.4); }
+.toast.chaos-toast .toast-title { color: var(--chaos); }
+
+@keyframes toastIn {
+  from { opacity: 0; transform: translateX(40px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+@keyframes toastOut {
+  from { opacity: 1; transform: translateX(0); }
+  to   { opacity: 0; transform: translateX(40px); }
+}
+
+/* ── Secret hint ──────────────────────────────────────────────────────────── */
+#secret-hint {
+  position: fixed;
+  bottom: 60px; left: 50%;
+  transform: translateX(-50%);
+  font-family: var(--font-glitch);
+  font-size: clamp(16px, 3vw, 22px);
+  color: var(--muted);
+  text-align: center;
+  opacity: 0;
+  z-index: 100;
+  transition: opacity 1s;
+  pointer-events: none;
+  letter-spacing: 2px;
+  max-width: 80vw;
+}
+
+/* ── Active users dot ─────────────────────────────────────────────────────── */
+#active-dot {
+  display: inline-block;
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: #00ff88;
+  box-shadow: 0 0 6px #00ff88;
+  margin-right: 5px;
+  animation: pulse 2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%       { opacity: 0.5; transform: scale(0.8); }
+}
+
+/* ── Glitch text effect ───────────────────────────────────────────────────── */
+.glitch {
+  animation: glitchAnim 0.3s steps(1) forwards;
+}
+
+@keyframes glitchAnim {
+  0%   { clip-path: inset(0 0 95% 0); transform: translate(-3px, 0); color: #ff0055; }
+  20%  { clip-path: inset(30% 0 50% 0); transform: translate(3px, 0); color: #00ffcc; }
+  40%  { clip-path: inset(60% 0 20% 0); transform: translate(-2px, 0); color: #ff0055; }
+  60%  { clip-path: inset(80% 0 5% 0); transform: translate(2px, 0); color: var(--accent); }
+  80%  { clip-path: inset(0 0 0 0); transform: translate(0,0); color: var(--accent); }
+  100% { clip-path: none; transform: none; }
+}
+
+/* ── Endgame screen ───────────────────────────────────────────────────────── */
+#endgame-screen {
+  position: fixed; inset: 0;
+  background: #000;
+  z-index: 10000;
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 40px;
+}
+
+#endgame-screen.active { display: flex; }
+
+#endgame-title {
+  font-family: var(--font-display);
+  font-size: clamp(40px, 10vw, 100px);
+  letter-spacing: 8px;
+  color: var(--chaos);
+  text-shadow: 0 0 60px var(--chaos), 0 0 120px var(--chaos);
+  animation: endgamePulse 2s ease-in-out infinite;
+  margin-bottom: 30px;
+}
+
+#endgame-body {
+  font-family: var(--font-glitch);
+  font-size: clamp(16px, 3vw, 24px);
+  color: var(--muted);
+  line-height: 2;
+  max-width: 600px;
+}
+
+#endgame-body .reveal {
+  color: var(--text);
+  font-size: clamp(18px, 4vw, 30px);
+  margin: 20px 0;
+}
+
+#endgame-count {
+  font-family: var(--font-display);
+  font-size: clamp(30px, 8vw, 70px);
+  color: var(--gold);
+  text-shadow: 0 0 40px rgba(255,215,0,0.6);
+  margin: 20px 0;
+}
+
+@keyframes endgamePulse {
+  0%, 100% { text-shadow: 0 0 60px var(--chaos), 0 0 120px var(--chaos); }
+  50%       { text-shadow: 0 0 100px var(--chaos), 0 0 200px var(--chaos), 0 0 300px rgba(159,0,255,0.3); }
+}
+
+/* ── Mutation indicator ───────────────────────────────────────────────────── */
+#mutation-label {
+  position: fixed;
+  top: 80px; left: 50%;
+  transform: translateX(-50%);
+  font-family: var(--font-glitch);
+  font-size: 14px;
+  color: var(--muted);
+  letter-spacing: 3px;
+  opacity: 0;
+  transition: opacity 0.5s;
+  z-index: 90;
+}
+
+/* ── Screen flash ─────────────────────────────────────────────────────────── */
+#flash-overlay {
+  position: fixed; inset: 0;
+  pointer-events: none;
+  z-index: 9990;
+  opacity: 0;
+  transition: opacity 0.05s;
+}
+
+/* ── Responsive ───────────────────────────────────────────────────────────── */
+@media (max-width: 600px) {
+  #button-arena { width: 280px; height: 280px; }
+  :root { --btn-size: 120px; }
+  #global-count { font-size: 60px; }
+  #header { padding: 12px 14px; }
+}
+</style>
+</head>
+<body>
+
+<!-- Header -->
+<div id="header">
+  <div id="title-block">
+    <h1>THE GLOBAL CHAOS BUTTON</h1>
+    <div class="subtitle">one button · all of humanity · unknown consequences</div>
+  </div>
+  <div id="stats-bar">
+    <div><span id="active-dot"></span><span id="active-users" class="stat-val">1</span> <span style="color:var(--muted)">active</span></div>
+    <div>total clicks <span id="total-clicks-stat" class="stat-val">0</span></div>
+  </div>
+</div>
+
+<!-- Chaos Banner -->
+<div id="chaos-banner">
+  ⚡ CHAOS MODE ACTIVATED ⚡
+  <div id="chaos-timer"></div>
+</div>
+
+<!-- Mutation label -->
+<div id="mutation-label">MUTATION: NORMAL</div>
+
+<!-- Main app -->
+<div id="app">
+  <!-- Counter -->
+  <div id="counter-display">
+    <div id="global-count">0</div>
+    <div id="count-label">TOTAL GLOBAL CLICKS</div>
+  </div>
+
+  <!-- Button Arena -->
+  <div id="button-arena">
+    <div id="hold-progress-wrap" class="hold-progress">
+      <div id="hold-progress-bar" class="hold-progress-bar"></div>
+    </div>
+    <!-- Button injected by JS -->
+  </div>
+</div>
+
+<!-- Identity Panel -->
+<div id="identity-panel">
+  <div class="id-block">
+    <div class="title-badge" id="player-title">NEWCOMER</div>
+    <div style="color:var(--muted); margin-top:2px;">clicker #<span id="clicker-number">—</span></div>
+  </div>
+  <div id="personal-clicks">
+    <div>your clicks <span id="my-clicks" class="stat-val">0</span></div>
+    <div style="color:var(--muted); font-size:10px;" id="join-time">joined just now</div>
+  </div>
+</div>
+
+<!-- Secret hint -->
+<div id="secret-hint"></div>
+
+<!-- Toast container -->
+<div id="toast-container"></div>
+
+<!-- Screen flash overlay -->
+<div id="flash-overlay"></div>
+
+<!-- Endgame screen -->
+<div id="endgame-screen">
+  <div id="endgame-title">THE VOID OPENS</div>
+  <div id="endgame-body">
+    <div>You did it. All of you. Together.</div>
+    <div class="reveal" id="endgame-truth"></div>
+    <div id="endgame-count">0</div>
+    <div style="margin-top:30px; font-size:14px; color: #333;">
+      The button never existed.<br>
+      You clicked anyway.<br>
+      That's what makes you human.
+    </div>
+  </div>
+</div>
+
+<script>
+// ╔══════════════════════════════════════════════════════════╗
+// ║  THE GLOBAL CHAOS BUTTON — CLIENT ENGINE                ║
+// ╚══════════════════════════════════════════════════════════╝
+
+const socket = io();
+
+// ── User Identity ─────────────────────────────────────────
+let USER_ID = localStorage.getItem('chaos_uid');
+if (!USER_ID) {
+  USER_ID = 'usr_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+  localStorage.setItem('chaos_uid', USER_ID);
+}
+let myClicks = parseInt(localStorage.getItem('chaos_clicks') || '0');
+let myTitle = localStorage.getItem('chaos_title') || 'Newcomer';
+let myClickerNumber = localStorage.getItem('chaos_number') || '—';
+let myJoinTime = parseInt(localStorage.getItem('chaos_join') || Date.now());
+
+// Themes & unlocks
+let unlockedThemes = JSON.parse(localStorage.getItem('chaos_themes') || '["default"]');
+let currentTheme = localStorage.getItem('chaos_theme') || 'default';
+applyTheme(currentTheme);
+
+// ── Game State ────────────────────────────────────────────
+const STATE = {
+  globalClicks: 0,
+  activeUsers: 1,
+  chaosMode: false,
+  chaosModeEndsAt: null,
+  multiplier: 1,
+  mutation: 'normal',   // current mutation type
+  mutationTimer: null,
+  holdTimer: null,
+  holdProgress: 0,
+  holdTarget: 1500,     // ms to hold
+  isHolding: false,
+  clickEnabled: true,
+  fakeButtons: [],
+  splitButtons: [],
+};
+
+const MUTATIONS = [
+  'normal', 'wandering', 'split', 'hold', 'shrink', 'grow',
+  'liar', 'invisible', 'rotating', 'multisize'
+];
+
+// ── DOM refs ──────────────────────────────────────────────
+const $globalCount   = document.getElementById('global-count');
+const $totalStat     = document.getElementById('total-clicks-stat');
+const $activeUsers   = document.getElementById('active-users');
+const $myClicks      = document.getElementById('my-clicks');
+const $playerTitle   = document.getElementById('player-title');
+const $clickerNum    = document.getElementById('clicker-number');
+const $joinTime      = document.getElementById('join-time');
+const $arena         = document.getElementById('button-arena');
+const $chaosBanner   = document.getElementById('chaos-banner');
+const $chaosTimer    = document.getElementById('chaos-timer');
+const $secretHint    = document.getElementById('secret-hint');
+const $mutLabel      = document.getElementById('mutation-label');
+const $flash         = document.getElementById('flash-overlay');
+const $holdWrap      = document.getElementById('hold-progress-wrap');
+const $holdBar       = document.getElementById('hold-progress-bar');
+const $endgame       = document.getElementById('endgame-screen');
+const $endgameTruth  = document.getElementById('endgame-truth');
+const $endgameCount  = document.getElementById('endgame-count');
+
+// ── Build the real button ─────────────────────────────────
+function createRealButton() {
+  const btn = document.createElement('button');
+  btn.className = 'chaos-btn';
+  btn.id = 'real-btn';
+  btn.textContent = 'CLICK';
+  btn.setAttribute('data-real', 'true');
+  $arena.appendChild(btn);
+  attachButtonListeners(btn, true);
+  return btn;
+}
+
+let realBtn = createRealButton();
+
+function attachButtonListeners(btn, isReal) {
+  btn.addEventListener('pointerdown', e => onBtnDown(e, btn, isReal));
+  btn.addEventListener('pointerup',   e => onBtnUp(e, btn, isReal));
+  btn.addEventListener('pointerleave',e => onBtnLeave(e, btn, isReal));
+  btn.addEventListener('click',       e => onBtnClick(e, btn, isReal));
+}
+
+function onBtnDown(e, btn, isReal) {
+  if (!isReal) return;
+  if (STATE.mutation === 'hold') {
+    STATE.isHolding = true;
+    $holdWrap.style.display = 'block';
+    startHoldTimer();
+  }
+}
+
+function onBtnUp(e, btn, isReal) {
+  if (STATE.mutation === 'hold') {
+    cancelHold();
+  }
+}
+
+function onBtnLeave(e, btn, isReal) {
+  if (STATE.mutation === 'hold') {
+    cancelHold();
+  }
+}
+
+function onBtnClick(e, btn, isReal) {
+  if (STATE.mutation === 'hold') return; // handled by hold timer
+  if (!STATE.clickEnabled) return;
+  if (!isReal) {
+    // Fake button punishment
+    flashScreen('#ff000022');
+    showToast('DECOY', 'That was a decoy. Nice try.', '');
+    return;
+  }
+  doClick(e.clientX, e.clientY);
+}
+
+// ── Hold mechanic ─────────────────────────────────────────
+function startHoldTimer() {
+  STATE.holdProgress = 0;
+  const interval = 30;
+  STATE.holdTimer = setInterval(() => {
+    if (!STATE.isHolding) return;
+    STATE.holdProgress += interval;
+    const pct = Math.min(100, (STATE.holdProgress / STATE.holdTarget) * 100);
+    $holdBar.style.width = pct + '%';
+    if (STATE.holdProgress >= STATE.holdTarget) {
+      clearInterval(STATE.holdTimer);
+      cancelHold();
+      const rect = realBtn.getBoundingClientRect();
+      doClick(rect.left + rect.width/2, rect.top + rect.height/2);
+    }
+  }, interval);
+}
+
+function cancelHold() {
+  STATE.isHolding = false;
+  clearInterval(STATE.holdTimer);
+  STATE.holdProgress = 0;
+  $holdBar.style.width = '0%';
+  $holdWrap.style.display = 'none';
+}
+
+// ── Do click ──────────────────────────────────────────────
+function doClick(x, y) {
+  // Liar mutation: show +1 but don't actually send
+  if (STATE.mutation === 'liar' && Math.random() < 0.4) {
+    spawnFloatIndicator(x, y, '+1', '#555');
+    realBtn.style.transform = 'scale(0.92)';
+    setTimeout(() => realBtn.style.transform = '', 100);
+    return;
+  }
+
+  realBtn.style.transform = 'scale(0.90)';
+  setTimeout(() => realBtn.style.transform = '', 120);
+
+  socket.emit('click', { userId: USER_ID });
+
+  // Optimistic local update
+  const worth = STATE.chaosMode ? STATE.multiplier : 1;
+  const color = STATE.chaosMode ? '#9f00ff' : (worth > 1 ? '#ffd700' : 'var(--accent)');
+  spawnFloatIndicator(x, y, '+' + worth, color);
+  triggerShake(STATE.chaosMode ? 8 : 3);
+}
+
+// ── Socket events ─────────────────────────────────────────
+socket.on('connect', () => {
+  socket.emit('register', { userId: USER_ID });
+});
+
+socket.on('init', data => {
+  STATE.globalClicks = data.globalClicks;
+  STATE.chaosMode    = data.chaosMode;
+  STATE.multiplier   = data.multiplier || 1;
+  STATE.chaosModeEndsAt = data.chaosModeEndsAt;
+  updateCounter();
+  if (data.chaosMode) showChaosBanner(data.chaosModeEndsAt);
+  if (data.endgameReached) triggerEndgame(data.globalClicks);
+});
+
+socket.on('identity', data => {
+  myClickerNumber = data.clickerNumber;
+  myJoinTime      = data.joinTime;
+  myTitle         = data.title;
+  if (!myClicks) myClicks = data.clicks;
+  localStorage.setItem('chaos_number', data.clickerNumber);
+  localStorage.setItem('chaos_join', data.joinTime);
+  updateIdentityUI();
+});
+
+socket.on('click_ack', data => {
+  STATE.globalClicks = data.globalClicks;
+  myClicks = data.yourClicks;
+  myTitle  = data.title;
+  localStorage.setItem('chaos_clicks', myClicks);
+  localStorage.setItem('chaos_title', myTitle);
+  updateCounter();
+  updateIdentityUI();
+
+  if (data.reward) handleReward(data.reward);
+});
+
+socket.on('global_update', data => {
+  STATE.globalClicks = data.globalClicks;
+  STATE.activeUsers  = data.activeUsers;
+  updateCounter();
+  document.getElementById('active-users').textContent = data.activeUsers;
+});
+
+socket.on('chaos_start', data => {
+  STATE.chaosMode   = true;
+  STATE.multiplier  = data.multiplier;
+  STATE.chaosModeEndsAt = data.endsAt;
+  showChaosBanner(data.endsAt);
+  flashScreen('#9f00ff22');
+  triggerShake(15);
+  showToast('⚡ CHAOS MODE', 'Click multiplier: ' + data.multiplier + 'x', 'chaos-toast');
+  document.body.classList.add('chaos-active');
+});
+
+socket.on('chaos_end', data => {
+  STATE.chaosMode  = false;
+  STATE.multiplier = 1;
+  hideChaosBanner();
+  document.body.classList.remove('chaos-active');
+});
+
+socket.on('secret_hint', data => {
+  showSecretHint(data.msg);
+  $globalCount.classList.add('glitch');
+  setTimeout(() => $globalCount.classList.remove('glitch'), 400);
+});
+
+socket.on('endgame', data => {
+  triggerEndgame(data.globalClicks, data.message);
+});
+
+socket.on('rate_limited', () => {
+  STATE.clickEnabled = false;
+  setTimeout(() => { STATE.clickEnabled = true; }, 500);
+});
+
+// ── Mutations ─────────────────────────────────────────────
+function applyMutation(type) {
+  // Clean up previous
+  clearFakeButtons();
+  realBtn.style.cssText = '';
+  realBtn.textContent = 'CLICK';
+  realBtn.className = 'chaos-btn';
+  $holdWrap.style.display = 'none';
+  cancelHold();
+
+  STATE.mutation = type;
+  $mutLabel.style.opacity = '1';
+  $mutLabel.textContent = 'MUTATION: ' + type.toUpperCase();
+  setTimeout(() => $mutLabel.style.opacity = '0', 3000);
+
+  switch(type) {
+    case 'wandering':
+      startWandering();
+      break;
+    case 'split':
+      createFakeButtons(2 + Math.floor(Math.random() * 3));
+      break;
+    case 'hold':
+      realBtn.classList.add('hold-mode');
+      realBtn.textContent = 'HOLD ME';
+      $holdWrap.style.display = 'none'; // show on press
+      break;
+    case 'shrink':
+      realBtn.style.setProperty('--btn-size', '80px');
+      realBtn.style.width = '80px';
+      realBtn.style.height = '80px';
+      realBtn.style.fontSize = '14px';
+      break;
+    case 'grow':
+      realBtn.style.width = '220px';
+      realBtn.style.height = '220px';
+      realBtn.style.fontSize = '32px';
+      break;
+    case 'liar':
+      // visual is normal, but 40% clicks don't count (handled in doClick)
+      realBtn.style.opacity = '0.85';
+      realBtn.textContent = 'CLICK*';
+      break;
+    case 'invisible':
+      realBtn.style.opacity = '0';
+      setTimeout(() => {
+        realBtn.style.transition = 'opacity 0.5s';
+        realBtn.style.opacity = '1';
+      }, 2000 + Math.random() * 3000);
+      break;
+    case 'rotating':
+      realBtn.style.animation = 'spin 3s linear infinite';
+      if (!document.getElementById('spin-style')) {
+        const s = document.createElement('style');
+        s.id = 'spin-style';
+        s.textContent = '@keyframes spin { to { transform: rotate(360deg); } }';
+        document.head.appendChild(s);
+      }
+      break;
+    case 'multisize':
+      // button randomly resizes
+      startMultisize();
+      break;
+    case 'normal':
+    default:
+      // All good
+      break;
+  }
+}
+
+function startWandering() {
+  const arenaRect = $arena.getBoundingClientRect();
+  const maxX = 120, maxY = 120;
+  function wander() {
+    if (STATE.mutation !== 'wandering') return;
+    const x = (Math.random() - 0.5) * maxX;
+    const y = (Math.random() - 0.5) * maxY;
+    realBtn.style.transform = `translate(${x}px, ${y}px)`;
+    realBtn.style.transition = 'transform 0.8s cubic-bezier(.36,.07,.19,.97)';
+    setTimeout(wander, 900 + Math.random() * 600);
+  }
+  wander();
+}
+
+function startMultisize() {
+  const sizes = [80, 120, 160, 100, 200, 90];
+  let i = 0;
+  function resize() {
+    if (STATE.mutation !== 'multisize') return;
+    const s = sizes[i % sizes.length];
+    realBtn.style.width  = s + 'px';
+    realBtn.style.height = s + 'px';
+    realBtn.style.transition = 'width 0.4s, height 0.4s';
+    i++;
+    setTimeout(resize, 800 + Math.random() * 500);
+  }
+  resize();
+}
+
+function createFakeButtons(count) {
+  for (let i = 0; i < count; i++) {
+    const fake = document.createElement('button');
+    fake.className = 'chaos-btn fake-btn';
+    fake.textContent = 'CLICK';
+    fake.style.position = 'absolute';
+    // Spread around arena
+    const angle = (i / count) * Math.PI * 2;
+    const r = 100 + Math.random() * 60;
+    const x = Math.cos(angle) * r;
+    const y = Math.sin(angle) * r;
+    fake.style.transform = `translate(${x}px, ${y}px)`;
+    attachButtonListeners(fake, false);
+    $arena.appendChild(fake);
+    STATE.fakeButtons.push(fake);
+  }
+}
+
+function clearFakeButtons() {
+  STATE.fakeButtons.forEach(b => b.remove());
+  STATE.fakeButtons = [];
+}
+
+// ── Mutation scheduler ────────────────────────────────────
+(function scheduleMutations() {
+  const delay = 15000 + Math.random() * 20000;
+  setTimeout(() => {
+    if (!STATE.chaosMode) {
+      const types = MUTATIONS.filter(m => m !== STATE.mutation);
+      const next = types[Math.floor(Math.random() * types.length)];
+      applyMutation(next);
+      // Revert after a while
+      const duration = 8000 + Math.random() * 12000;
+      setTimeout(() => {
+        if (STATE.mutation !== 'normal') applyMutation('normal');
+      }, duration);
+    }
+    scheduleMutations();
+  }, delay);
+})();
+
+// ── Chaos UI ──────────────────────────────────────────────
+let chaosTimerInterval = null;
+
+function showChaosBanner(endsAt) {
+  $chaosBanner.style.display = 'block';
+  clearInterval(chaosTimerInterval);
+  chaosTimerInterval = setInterval(() => {
+    const remaining = Math.max(0, endsAt - Date.now());
+    $chaosTimer.textContent = (remaining / 1000).toFixed(1) + 's remaining';
+    if (remaining <= 0) {
+      clearInterval(chaosTimerInterval);
+    }
+  }, 100);
+}
+
+function hideChaosBanner() {
+  $chaosBanner.style.display = 'none';
+  clearInterval(chaosTimerInterval);
+}
+
+// ── Screen effects ────────────────────────────────────────
+function triggerShake(intensity) {
+  const app = document.getElementById('app');
+  let frames = 8;
+  function shake() {
+    if (frames-- <= 0) {
+      app.style.transform = '';
+      return;
+    }
+    const x = (Math.random() - 0.5) * intensity;
+    const y = (Math.random() - 0.5) * intensity;
+    app.style.transform = `translate(${x}px, ${y}px)`;
+    requestAnimationFrame(shake);
+  }
+  shake();
+}
+
+function flashScreen(color) {
+  $flash.style.background = color;
+  $flash.style.opacity = '1';
+  setTimeout(() => $flash.style.opacity = '0', 80);
+}
+
+// ── Float indicators ──────────────────────────────────────
+function spawnFloatIndicator(x, y, text, color) {
+  const el = document.createElement('div');
+  el.className = 'float-indicator';
+  el.textContent = text;
+  el.style.left = (x - 15) + 'px';
+  el.style.top  = (y - 20) + 'px';
+  el.style.color = color || 'var(--accent)';
+  if (text.startsWith('+') && parseInt(text.slice(1)) >= 5) {
+    el.style.fontSize = '42px';
+  }
+  document.body.appendChild(el);
+  setTimeout(() => el.remove(), 1200);
+}
+
+// ── Toast ─────────────────────────────────────────────────
+function showToast(title, desc, cls) {
+  const $tc = document.getElementById('toast-container');
+  const toast = document.createElement('div');
+  toast.className = 'toast' + (cls ? ' ' + cls : '');
+  toast.innerHTML = `<div class="toast-title">${title}</div>${desc ? `<div>${desc}</div>` : ''}`;
+  $tc.appendChild(toast);
+  setTimeout(() => toast.remove(), 4200);
+}
+
+// ── Rewards ───────────────────────────────────────────────
+function handleReward(reward) {
+  let cls = '';
+  if (reward.id === 'golden_click') { cls = 'gold-toast'; flashScreen('#ffd70033'); }
+  if (reward.id === 'chaos_herald') { cls = 'chaos-toast'; }
+  if (reward.id === 'theme_unlock') unlockRandomTheme();
+  showToast(reward.label, reward.desc, cls);
+  triggerShake(6);
+}
+
+function unlockRandomTheme() {
+  const all = ['default', 'void', 'gold', 'ice'];
+  const locked = all.filter(t => !unlockedThemes.includes(t));
+  if (locked.length === 0) return;
+  const newTheme = locked[Math.floor(Math.random() * locked.length)];
+  unlockedThemes.push(newTheme);
+  localStorage.setItem('chaos_themes', JSON.stringify(unlockedThemes));
+  localStorage.setItem('chaos_theme', newTheme);
+  currentTheme = newTheme;
+  applyTheme(newTheme);
+}
+
+function applyTheme(theme) {
+  document.body.className = theme !== 'default' ? 'theme-' + theme : '';
+}
+
+// ── Secret hints ──────────────────────────────────────────
+function showSecretHint(msg) {
+  $secretHint.textContent = msg;
+  $secretHint.style.opacity = '1';
+  setTimeout(() => $secretHint.style.opacity = '0', 6000);
+}
+
+// ── Counter updates ───────────────────────────────────────
+function updateCounter() {
+  $globalCount.textContent = STATE.globalClicks.toLocaleString();
+  $totalStat.textContent = STATE.globalClicks.toLocaleString();
+}
+
+function updateIdentityUI() {
+  $myClicks.textContent = myClicks.toLocaleString();
+  $playerTitle.textContent = myTitle.toUpperCase();
+  $clickerNum.textContent = myClickerNumber;
+  const elapsed = Date.now() - myJoinTime;
+  if (elapsed < 60000)        $joinTime.textContent = 'joined just now';
+  else if (elapsed < 3600000) $joinTime.textContent = `joined ${Math.floor(elapsed/60000)}m ago`;
+  else                        $joinTime.textContent = `joined ${Math.floor(elapsed/3600000)}h ago`;
+}
+
+// ── Endgame ───────────────────────────────────────────────
+function triggerEndgame(clicks, msg) {
+  $endgame.classList.add('active');
+  $endgameCount.textContent = (clicks || STATE.globalClicks).toLocaleString() + ' CLICKS';
+  $endgameTruth.textContent = msg || "THE SEQUENCE IS COMPLETE.";
+
+  // Typewriter reveal
+  const truths = [
+    "There was never a goal.",
+    "The chaos was the point.",
+    "You are the button.",
+  ];
+  let ti = 0, ci = 0;
+  $endgameTruth.textContent = '';
+  function typeNext() {
+    if (ti >= truths.length) return;
+    if (ci < truths[ti].length) {
+      $endgameTruth.textContent += truths[ti][ci++];
+      setTimeout(typeNext, 50);
+    } else {
+      ti++; ci = 0;
+      $endgameTruth.textContent += '\n';
+      setTimeout(typeNext, 800);
+    }
+  }
+  setTimeout(typeNext, 1500);
+}
+
+// ── Ambient glitch (random subtle glitches) ───────────────
+setInterval(() => {
+  if (Math.random() < 0.05) {
+    $globalCount.classList.add('glitch');
+    setTimeout(() => $globalCount.classList.remove('glitch'), 350);
+  }
+}, 8000);
+
+// ── Random local chaos events (client-side flavor) ────────
+setInterval(() => {
+  if (Math.random() < 0.1 && !STATE.chaosMode) {
+    const msgs = [
+      "the button watches",
+      "you are being counted",
+      "click. click. click.",
+      "it knows your IP",
+      "this is not a game",
+      "signal strength: increasing",
+    ];
+    const m = msgs[Math.floor(Math.random() * msgs.length)];
+    $mutLabel.textContent = m;
+    $mutLabel.style.opacity = '0.4';
+    setTimeout(() => $mutLabel.style.opacity = '0', 4000);
+  }
+}, 30000);
+
+// ── Init ──────────────────────────────────────────────────
+updateIdentityUI();
+</script>
+</body>
+</html>
